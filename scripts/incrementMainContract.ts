@@ -18,7 +18,7 @@ export async function run(provider: NetworkProvider, args: string[]) {
 
     await mainContract.sendIncrease(provider.sender(), {
         increaseBy: 1,
-        value: toNano('0.05'),
+        value: toNano('0.01'),
     });
 
     ui.write('Waiting for counter to increase...');
