@@ -1,13 +1,18 @@
 #include "imports/stdlib.fc";
 
 const op::increase = "op::increase"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
+const op::deposit = "op::deposit"c;
+const op::withdraw = "op::withdraw"c;
+const const::min_tons_for_storage = 10000000; ;; 0.01 TON
+
 
 ;; storage variables
-
 ;; id is required to be able to create different instances of counters
 ;; since addresses in TON depend on the initial state of the contract
 global int ctx_id;
 global int ctx_counter;
+global slice ctx_owner;
+;; global slice ctx_sender;
 
 ;; load_data populates storage variables using stored data
 () load_data() impure {
@@ -15,6 +20,8 @@ global int ctx_counter;
 
     ctx_id = ds~load_uint(32);
     ctx_counter = ds~load_uint(32);
+    ctx_owner = ds~load_msg_addr();
+    ;; ctx_sender = ds~load_msg_addr();
 
     ds.end_parse();
 }
@@ -25,6 +32,8 @@ global int ctx_counter;
         begin_cell()
             .store_uint(ctx_id, 32)
             .store_uint(ctx_counter, 32)
+            .store_slice(ctx_owner)
+            ;; .store_slice(ctx_sender)
             .end_cell()
     );
 }
@@ -46,11 +55,39 @@ global int ctx_counter;
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
+
     if (op == op::increase) {
         int increase_by = in_msg_body~load_uint(32);
         ctx_counter += increase_by;
         save_data();
         return ();
+    }
+
+    if (op == op::deposit) {
+        save_data();
+        return();
+    }
+
+    if (op == op::withdraw) {
+        slice sender = in_msg_body~load_msg_addr();
+
+        throw_unless(103, equal_slice_bits(sender, ctx_owner));
+        int withdraw_amount = in_msg_body~load_coins();
+        throw_unless(104, my_balance >= withdraw_amount);
+
+        int return_value = min(withdraw_amount, my_balance - const::min_tons_for_storage);
+        
+        int msg_mode = 1; ;; pay transfer fees separately from msg value
+
+        var msg = begin_cell()
+                .store_uint(0x18, 6)
+                .store_slice(sender)
+                .store_coins(return_value)
+                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+
+        send_raw_message(msg.end_cell(), msg_mode);
+
+        return();
     }
 
     throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
@@ -68,4 +105,14 @@ int get_counter() method_id {
 int get_id() method_id {
     load_data();
     return ctx_id;
+}
+
+slice get_owner() method_id {
+    load_data();
+    return ctx_owner;
+}
+
+int get_contract_balance() method_id {
+    var [balance, _] = get_balance();
+    return balance;
 }
