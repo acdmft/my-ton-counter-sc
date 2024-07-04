@@ -1,4 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
+const crc32 = require("crc-32");
 
 export type MainContractConfig = {
     id: number;
@@ -10,7 +11,7 @@ export function mainContractConfigToCell(config: MainContractConfig): Cell {
 }
 
 export const Opcodes = {
-    increase: 0x7e8764ef,
+    increase: crc32.str('op::increase'), // 0x7e8764ef,
 };
 
 export class MainContract implements Contract {
